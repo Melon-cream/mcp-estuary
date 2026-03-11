@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "hello-docker": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcpe-hello-docker-mcp"
+      ]
+    }
+  }
+}

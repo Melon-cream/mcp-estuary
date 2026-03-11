@@ -1,0 +1,11 @@
+.git
+.gitignore
+.docs
+.cache
+.home
+.mcpe-state
+.tmp
+.mcp-estuary
+.memory/*.json
+README.md
+README-en.md

@@ -1,0 +1,12 @@
+.docs/
+.cache/
+.home/
+.mcpe-state/
+.tmp/
+.memory/*.json
+
+.env
+.env.*
+*.log
+*.pid
+coverage.out
