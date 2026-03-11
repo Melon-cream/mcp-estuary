@@ -153,7 +153,7 @@ docker compose up --build
 
 ## Example
 
-A minimal Docker-based MCP server example is included in [examples/hello-docker-mcp/Dockerfile](https://github.com/Melon-cream/mcp-estuary/examples/hello-docker-mcp/Dockerfile).
+A minimal Docker-based MCP server example is included in [examples/hello-docker-mcp/Dockerfile](https://github.com/Melon-cream/mcp-estuary/edit/main/README-en.md).
 
 Build:
 
@@ -161,7 +161,7 @@ Build:
 docker build -t mcpe-hello-docker-mcp ./examples/hello-docker-mcp
 ```
 
-Config example: [examples/hello-docker-mcp/mcpe.json](https://github.com/Melon-cream/mcp-estuary/examples/hello-docker-mcp/mcpe.json)
+Config example: [examples/hello-docker-mcp/mcpe.json](https://github.com/Melon-cream/mcp-estuary/edit/main/README-en.md)
 
 ```json
 {
