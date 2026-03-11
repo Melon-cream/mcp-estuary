@@ -60,7 +60,7 @@ English Version:[README-en.md](https://github.com/Melon-cream/mcp-estuary/blob/m
 
 - `cwd` は省略可能です。相対パスは `mcpe.json` があるディレクトリ基準で解決されます。
 - 環境変数名が `_PATH` で終わる場合、値が相対パスなら `mcpe.json` 基準の絶対パスに解決されます。
-- 実際のトークンや API キーは `mcpe.json` 可能な限り環境変数で投入してください。
+- 実際のトークンや API キーは可能な限り環境変数で投入してください。
 
 リポジトリ直下の `mcpe.example.json` は検証用サンプルです。利用前に内容を見直してください。
 
