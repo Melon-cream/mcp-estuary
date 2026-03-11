@@ -4,7 +4,7 @@
 
 `mcp.json` と同じ記法で記述された `mcpe.json` を読み取り、自動で並列インストールして起動します。
 
-English Version:[README-en.md](https://github.com/Melon-cream/mcp-estuary/README-en.md) 
+English Version:[README-en.md](https://github.com/Melon-cream/mcp-estuary/blob/main/README-en.md)
 
 ## 主な機能
 
@@ -155,7 +155,7 @@ docker compose up --build
 
 ## Example
 
-最小の Docker ベース MCP サーバー例を [examples/hello-docker-mcp/Dockerfile](https://github.com/Melon-cream/mcp-estuary/examples/hello-docker-mcp/Dockerfile) に含めています。
+最小の Docker ベース MCP サーバー例を [examples/hello-docker-mcp/Dockerfile](https://github.com/Melon-cream/mcp-estuary/edit/main/README.md) に含めています。
 
 ビルド:
 
@@ -163,7 +163,7 @@ docker compose up --build
 docker build -t mcpe-hello-docker-mcp ./examples/hello-docker-mcp
 ```
 
-設定例: [examples/hello-docker-mcp/mcpe.json](https://github.com/Melon-cream/mcp-estuary/examples/hello-docker-mcp/mcpe.json)
+設定例: [examples/hello-docker-mcp/mcpe.json](https://github.com/Melon-cream/mcp-estuary/edit/main/README.md)
 
 ```json
 {
