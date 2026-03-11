@@ -28,11 +28,11 @@ type ServerHandle struct {
 	logger  *log.Logger
 	install install.Result
 
-	mu           sync.Mutex
-	client       *mcp.Client
-	toolMap      map[string]string
-	processStop  context.CancelFunc
-	processLog   *os.File
+	mu          sync.Mutex
+	client      *mcp.Client
+	toolMap     map[string]string
+	processStop context.CancelFunc
+	processLog  *os.File
 }
 
 func NewManager(servers map[string]config.Server, installs map[string]install.Result, workDirs map[string]string, logPaths map[string]string, logger *log.Logger) *Manager {
