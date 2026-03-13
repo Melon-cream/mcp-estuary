@@ -102,7 +102,7 @@ Codex example:
 | Relative `_PATH` resolution after expansion | ☑ |
 | Auto-repair for trailing commas in `mcpe.json` | ☑ |
 | Background launch by default | ☑ |
-| `mcpe config set --systemd enable|disable` | ☑ |
+| `mcpe config set --systemd enable/disable` | ☑ |
 | Config hot reload | ☑ |
 | `mcpe doctor` | ☑ |
 | `mcpe status` | ☑ |
