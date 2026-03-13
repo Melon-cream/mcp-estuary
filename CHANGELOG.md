@@ -1,27 +1,5 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on Keep a Changelog, with release sections grouped by version and standard change categories.
-
-## [Unreleased]
-
-### Added
-
-- None yet.
-
-### Changed
-
-- None yet.
-
-### Fixed
-
-- None yet.
-
-### Removed
-
-- None yet.
-
 ## [0.2.0] - 2026-03-13
 
 ### Added
