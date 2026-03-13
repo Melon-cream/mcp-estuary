@@ -1,12 +1,12 @@
 # mcp-estuary
 
-`mcp-estuary` is a minimal MCP gateway that exposes multiple stdio-based MCP servers as one streamable HTTP `/mcp` endpoint.
+`mcp-estuary` は、複数の stdio ベース MCP サーバーを単一の streamable HTTP `/mcp` endpoint として公開する minimal MCP gateway です。
 
-Japanese README: [README-JP.md](https://github.com/Melon-cream/mcp-estuary/blob/main/README-JP.md)
+English README: [README.md](https://github.com/Melon-cream/mcp-estuary/blob/main/README.md)
 
 ## Quick Startup
 
-Write `mcpe.json` in the same shape as `mcp.json`.
+まず `mcp.json` と同じ形で `mcpe.json` を書きます。
 
 ```json
 {
@@ -33,13 +33,13 @@ Write `mcpe.json` in the same shape as `mcp.json`.
 }
 ```
 
-Start the gateway.
+次に gateway を起動します。
 
 ```bash
 mcpe serve --config mcpe.json --listen 127.0.0.1:8080
 ```
 
-Point your client at `mcp-estuary`.
+クライアント側では `mcp-estuary` を 1 つの MCP server として設定します。
 
 ```json
 {
@@ -56,26 +56,9 @@ Point your client at `mcp-estuary`.
 }
 ```
 
-Just use.
+あとは利用するだけです。
 
-Claude example:
-
-```json
-{
-  "mcpServers": {
-    "estuary": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "http://127.0.0.1:8080/mcp"
-      ]
-    }
-  }
-}
-```
-
-Codex example:
+Claude から使う設定例:
 
 ```json
 {
@@ -92,18 +75,35 @@ Codex example:
 }
 ```
 
-## Feature Matrix
+Codex から使う設定例:
 
-| Feature | Supported |
+```json
+{
+  "mcpServers": {
+    "estuary": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://127.0.0.1:8080/mcp"
+      ]
+    }
+  }
+}
+```
+
+## 機能対応表
+
+| 機能 | 対応 |
 | --- | --- |
-| Single `/mcp` streamable HTTP gateway | ☑ |
-| `uvx` / `npx` / `docker` runtimes | ☑ |
-| `.env` expansion in `mcpe.json` | ☑ |
-| Relative `_PATH` resolution after expansion | ☑ |
-| Auto-repair for trailing commas in `mcpe.json` | ☑ |
-| Background launch by default | ☑ |
+| 単一 `/mcp` streamable HTTP gateway | ☑ |
+| `uvx` / `npx` / `docker` ランタイム | ☑ |
+| `mcpe.json` の `.env` 展開 | ☑ |
+| 展開後の `_PATH` 相対パス解決 | ☑ |
+| trailing comma の自動修復 | ☑ |
+| デフォルトのバックグラウンド起動 | ☑ |
 | `mcpe config set --systemd enable|disable` | ☑ |
-| Config hot reload | ☑ |
+| 設定ホットリロード | ☑ |
 | `mcpe doctor` | ☑ |
 | `mcpe status` | ☑ |
 | `mcpe logs -f` / `--follow` | ☑ |
@@ -111,34 +111,34 @@ Codex example:
 ## Requirements
 
 - Go 1.26+
-- One or more runtime dependencies used by your servers:
+- 利用するサーバーに応じて以下のいずれか
   - `uv`
   - `node` / `npm`
   - `docker`
 
-## Configuration Details
+## 設定仕様
 
-`mcpe.json` is loaded from the current directory by default.
+デフォルトではカレントディレクトリの `mcpe.json` を読み込みます。
 
-Environment handling:
+環境変数まわり:
 
-- `${VAR}` references inside `env` are expanded from process environment variables first, then from `.env` next to `mcpe.json`.
-- Undefined `${VAR}` references make that server invalid. Other valid servers still load.
-- `_PATH` values are resolved after expansion, relative to the directory containing `mcpe.json`.
-- `MCPE_HOME` also reads from the same `.env` file when it is not already set in the process environment.
-- Docker-based MCP servers do not receive host environment variables automatically. Pass them explicitly in `docker run` args or container configuration.
+- `env` 内の `${VAR}` は、まず親プロセス環境変数、次に `mcpe.json` と同じディレクトリの `.env` から展開します。
+- 未定義の `${VAR}` を参照した server は不正扱いになり、その server だけスキップされます。
+- `_PATH` で終わる環境変数は、展開後の値が相対パスなら `mcpe.json` 基準の絶対パスに変換します。
+- `MCPE_HOME` も同じ `.env` から読めます。親プロセス側で設定されていればそちらを優先します。
+- Docker runtime の MCP server にはホスト側の環境変数は自動注入されません。必要な値は `docker run` 側で明示してください。
 
-Config repair:
+自動修復:
 
-- `mcpe.json` with trailing commas is repaired automatically.
-- The repaired diff is written to the gateway log.
+- `mcpe.json` の trailing comma は自動修復されます。
+- 修復差分は gateway log に出ます。
 
-Hot reload:
+ホットリロード:
 
-- `mcpe serve` polls `mcpe.json` and reloads it automatically.
-- Invalid changes are isolated. Healthy servers continue serving.
+- `mcpe serve` 実行中は `mcpe.json` を定期監視して自動再読込します。
+- 設定不備がある server が混ざっても、正常な server はそのまま継続します。
 
-## Commands
+## CLI
 
 ```text
 mcpe serve [--config PATH] [--use NAME ...] [--install-concurrency N] [--listen ADDR] [--foreground]
@@ -152,34 +152,34 @@ mcpe config set --systemd enable|disable [--config PATH] [--listen ADDR]
 mcpe --help
 ```
 
-Install concurrency precedence:
+install 並列数の優先順位:
 
 1. `INSTALL_CONCURRENCY`
 2. `serve --install-concurrency`
 3. `mcpe config set --install-concurrency`
-4. default `2`
+4. デフォルト `2`
 
-## Status Directory
+## 状態ディレクトリ
 
-Runtime state is stored under `~/.mcp-estuary` by default.
+実行時状態はデフォルトで `~/.mcp-estuary` 配下に保存されます。
 
 - gateway log: `~/.mcp-estuary/logs/gateway.log`
 - server log: `~/.mcp-estuary/logs/servers/<name>.log`
 - managed workdir: `~/.mcp-estuary/mcp-servers/<name>`
 - runtime status: `~/.mcp-estuary/run/runtime-status.json`
 
-When `mcpe serve` starts, it also creates `mcp-servers-logs` next to `mcpe.json` as a symlink to the server log directory.
+起動時には `mcpe.json` の隣に `mcp-servers-logs` シンボリックリンクも自動作成されます。
 
-`mcpe status` also shows whether `mcpe.service` is registered, enabled, and active in user systemd.
+`mcpe status` では、user systemd 上の `mcpe.service` の登録・enable・active 状態も確認できます。
 
-## HTTP Endpoints
+## HTTP Endpoint
 
 - `POST /mcp`
 - `GET /mcp`
 - `DELETE /mcp`
 - `GET /healthz`
 
-`POST /mcp` supports:
+`POST /mcp` では次を扱います。
 
 - `initialize`
 - `notifications/initialized`
@@ -187,17 +187,17 @@ When `mcpe serve` starts, it also creates `mcp-servers-logs` next to `mcpe.json`
 - `tools/list`
 - `tools/call`
 
-Exposed tool names are rewritten as `<server>__<tool>`.
+公開名は `<server>__<tool>` に変換されます。
 
 ## Docker
 
-Build:
+ビルド:
 
 ```bash
 docker build -t mcp-estuary .
 ```
 
-Run:
+実行:
 
 ```bash
 docker run --rm -p 8080:8080 \
@@ -208,19 +208,19 @@ docker run --rm -p 8080:8080 \
   mcp-estuary
 ```
 
-`/var/run/docker.sock` is only required when the gateway must launch Docker-based MCP servers.
+`/var/run/docker.sock` は Docker ベース MCP server を起動する場合のみ必要です。
 
 ## Docker Compose
 
-`compose.yaml` includes:
+`compose.yaml` には以下が含まれます。
 
-- published port `8080`
+- `8080` 公開
 - `mcpe.json` mount
 - `.memory` bind mount
-- persistent volume for `/root/.mcp-estuary`
-- `/var/run/docker.sock` mount for Docker-based MCP servers
+- `/root/.mcp-estuary` 永続 volume
+- Docker ベース MCP server 用 `/var/run/docker.sock`
 
-Start:
+起動:
 
 ```bash
 docker compose up --build
@@ -228,7 +228,7 @@ docker compose up --build
 
 ## Example
 
-Minimal Docker MCP example:
+最小の Docker MCP 例:
 
 - [examples/hello-docker-mcp/Dockerfile](examples/hello-docker-mcp/Dockerfile)
 - [examples/hello-docker-mcp/mcpe.json](examples/hello-docker-mcp/mcpe.json)
