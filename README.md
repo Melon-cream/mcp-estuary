@@ -75,21 +75,17 @@ Claude example:
 }
 ```
 
-Codex example:
+Codex `config.toml` example:
 
-```json
-{
-  "mcpServers": {
-    "estuary": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "http://127.0.0.1:8080/mcp"
-      ]
-    }
-  }
-}
+```toml
+[mcp_servers.estuary]
+url = "http://127.0.0.1:8080/mcp"
+```
+
+You can also add it from the CLI:
+
+```bash
+codex mcp add estuary --url http://127.0.0.1:8080/mcp
 ```
 
 ## Feature Matrix
@@ -178,6 +174,8 @@ When `mcpe serve` starts, it also creates `mcp-servers-logs` next to `mcpe.json`
 - `GET /mcp`
 - `DELETE /mcp`
 - `GET /healthz`
+
+Use the exact `/mcp` path for MCP clients. Pointing a client at `http://127.0.0.1:8080` or `http://127.0.0.1:8080/mcp/` returns `404 page not found`.
 
 `POST /mcp` supports:
 

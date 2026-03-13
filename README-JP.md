@@ -75,21 +75,17 @@ Claude から使う設定例:
 }
 ```
 
-Codex から使う設定例:
+Codex `config.toml` の設定例:
 
-```json
-{
-  "mcpServers": {
-    "estuary": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "mcp-remote",
-        "http://127.0.0.1:8080/mcp"
-      ]
-    }
-  }
-}
+```toml
+[mcp_servers.estuary]
+url = "http://127.0.0.1:8080/mcp"
+```
+
+CLI から追加する場合:
+
+```bash
+codex mcp add estuary --url http://127.0.0.1:8080/mcp
 ```
 
 ## 機能対応表
@@ -178,6 +174,8 @@ install 並列数の優先順位:
 - `GET /mcp`
 - `DELETE /mcp`
 - `GET /healthz`
+
+MCP client では必ず `/mcp` を含む URL を指定してください。`http://127.0.0.1:8080` や `http://127.0.0.1:8080/mcp/` に向けると `404 page not found` が返ります。
 
 `POST /mcp` では次を扱います。
 
