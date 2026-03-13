@@ -9,35 +9,95 @@ import (
 	"sort"
 	"syscall"
 	"time"
+
+	"github.com/Melon-cream/mcp-estuary/internal/envfile"
 )
 
 const defaultInstallConcurrency = 2
 
 type Layout struct {
-	Home           string
-	RunDir         string
-	ConfigDir      string
-	LogDir         string
-	ServerLogDir   string
-	ServerWorkRoot string
-	SettingsPath   string
-	GatewayPIDPath string
-	GatewayLogPath string
+	Home              string
+	RunDir            string
+	ConfigDir         string
+	LogDir            string
+	ServerLogDir      string
+	ServerWorkRoot    string
+	SettingsPath      string
+	GatewayPIDPath    string
+	GatewayLogPath    string
+	RuntimeStatusPath string
 }
 
 type Settings struct {
-	InstallConcurrency int `json:"installConcurrency"`
+	InstallConcurrency int  `json:"installConcurrency"`
+	SystemdEnabled     bool `json:"systemdEnabled"`
 }
 
 type PIDFile struct {
 	PID        int       `json:"pid"`
 	ListenAddr string    `json:"listenAddr"`
 	StartedAt  time.Time `json:"startedAt"`
+	ConfigPath string    `json:"configPath,omitempty"`
 }
 
-func ResolveHome() (string, error) {
+type RuntimeStatus struct {
+	Gateway GatewayStatus                  `json:"gateway"`
+	Servers map[string]ServerRuntimeStatus `json:"servers"`
+}
+
+type GatewayStatus struct {
+	PID        int       `json:"pid"`
+	ListenAddr string    `json:"listenAddr"`
+	ConfigPath string    `json:"configPath"`
+	StartedAt  time.Time `json:"startedAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+	Mode       string    `json:"mode"`
+}
+
+type ServerRuntimeStatus struct {
+	Name        string            `json:"name"`
+	Command     string            `json:"command"`
+	Args        []string          `json:"args"`
+	Cwd         string            `json:"cwd,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
+	Installed   bool              `json:"installed"`
+	InstallSkip bool              `json:"installSkip,omitempty"`
+	InstallErr  string            `json:"installErr,omitempty"`
+	State       string            `json:"state"`
+	LastStartAt time.Time         `json:"lastStartAt,omitempty"`
+	LastError   string            `json:"lastError,omitempty"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+}
+
+func ResolveHome(configPath string) (string, error) {
 	if home := os.Getenv("MCPE_HOME"); home != "" {
 		return filepath.Abs(home)
+	}
+	if configPath != "" {
+		configDir := filepath.Dir(configPath)
+		values, _, err := envfile.Load(configDir)
+		if err != nil {
+			return "", err
+		}
+		if home, ok := values["MCPE_HOME"]; ok && home != "" {
+			if !filepath.IsAbs(home) {
+				home = filepath.Join(configDir, home)
+			}
+			return filepath.Abs(home)
+		}
+	}
+	cwd, err := os.Getwd()
+	if err == nil {
+		values, _, loadErr := envfile.Load(cwd)
+		if loadErr != nil {
+			return "", loadErr
+		}
+		if home, ok := values["MCPE_HOME"]; ok && home != "" {
+			if !filepath.IsAbs(home) {
+				home = filepath.Join(cwd, home)
+			}
+			return filepath.Abs(home)
+		}
 	}
 	userHome, err := os.UserHomeDir()
 	if err != nil {
@@ -48,15 +108,16 @@ func ResolveHome() (string, error) {
 
 func NewLayout(home string) Layout {
 	return Layout{
-		Home:           home,
-		RunDir:         filepath.Join(home, "run"),
-		ConfigDir:      filepath.Join(home, "config"),
-		LogDir:         filepath.Join(home, "logs"),
-		ServerLogDir:   filepath.Join(home, "logs", "servers"),
-		ServerWorkRoot: filepath.Join(home, "mcp-servers"),
-		SettingsPath:   filepath.Join(home, "config", "settings.json"),
-		GatewayPIDPath: filepath.Join(home, "run", "gateway.pid"),
-		GatewayLogPath: filepath.Join(home, "logs", "gateway.log"),
+		Home:              home,
+		RunDir:            filepath.Join(home, "run"),
+		ConfigDir:         filepath.Join(home, "config"),
+		LogDir:            filepath.Join(home, "logs"),
+		ServerLogDir:      filepath.Join(home, "logs", "servers"),
+		ServerWorkRoot:    filepath.Join(home, "mcp-servers"),
+		SettingsPath:      filepath.Join(home, "config", "settings.json"),
+		GatewayPIDPath:    filepath.Join(home, "run", "gateway.pid"),
+		GatewayLogPath:    filepath.Join(home, "logs", "gateway.log"),
+		RuntimeStatusPath: filepath.Join(home, "run", "runtime-status.json"),
 	}
 }
 
@@ -205,4 +266,67 @@ func SortedServerLogs(layout Layout) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+func SaveRuntimeStatus(path string, status RuntimeStatus) error {
+	if status.Servers == nil {
+		status.Servers = map[string]ServerRuntimeStatus{}
+	}
+	status.Gateway.UpdatedAt = time.Now().UTC()
+	data, err := json.MarshalIndent(status, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal runtime status: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write runtime status: %w", err)
+	}
+	return nil
+}
+
+func LoadRuntimeStatus(path string) (RuntimeStatus, error) {
+	var status RuntimeStatus
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return status, fmt.Errorf("read runtime status: %w", err)
+	}
+	if err := json.Unmarshal(data, &status); err != nil {
+		return status, fmt.Errorf("parse runtime status: %w", err)
+	}
+	if status.Servers == nil {
+		status.Servers = map[string]ServerRuntimeStatus{}
+	}
+	return status, nil
+}
+
+func RemoveRuntimeStatus(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func EnsureServerLogSymlink(configPath string, layout Layout) error {
+	if configPath == "" {
+		return nil
+	}
+	target, err := filepath.Abs(layout.ServerLogDir)
+	if err != nil {
+		return err
+	}
+	linkPath := filepath.Join(filepath.Dir(configPath), "mcp-servers-logs")
+	info, err := os.Lstat(linkPath)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			current, readErr := os.Readlink(linkPath)
+			if readErr == nil && current == target {
+				return nil
+			}
+			return fmt.Errorf("%s already exists and points elsewhere", linkPath)
+		}
+		return fmt.Errorf("%s already exists and is not a symlink", linkPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Symlink(target, linkPath)
 }

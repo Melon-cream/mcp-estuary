@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Melon-cream/mcp-estuary/internal/config"
+)
 
 func TestParseServeArgsSupportsUseList(t *testing.T) {
 	t.Parallel()
@@ -40,5 +44,24 @@ func TestResolveConcurrencyPrecedence(t *testing.T) {
 	}
 	if got := resolveInstallConcurrency(0, 0); got != 2 {
 		t.Fatalf("default should be used, got %d", got)
+	}
+}
+
+func TestSelectServersMarksUnknownRequestedServerAsError(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Servers: map[string]config.Server{
+			"fetch": {Name: "fetch", Command: "uvx", Args: []string{"mcp-server-fetch"}},
+		},
+		Defined: map[string]struct{}{"fetch": {}},
+	}
+
+	selected := selectServers(cfg, []string{"fetch", "missing"})
+	if _, ok := selected.Servers["fetch"]; !ok {
+		t.Fatal("expected fetch to be selected")
+	}
+	if got := selected.Errors["missing"]; got == "" {
+		t.Fatal("expected missing server error")
 	}
 }
