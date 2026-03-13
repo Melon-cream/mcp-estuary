@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## [0.2.1] - 2026-03-14
+
+### Changed
+
+- upstream server のライフサイクルを変更
+  - `tools/list` は一時起動して metadata を取得後に停止
+  - `tools/call` は対象 server のみ起動し、アイドル timeout 後に停止
+
 ## [0.2.0] - 2026-03-13
 
 ### Added
@@ -21,9 +29,6 @@
 ### Changed
 
 - `mcpe serve` はデフォルトでバックグラウンド起動するよう変更
-- upstream server のライフサイクルを変更
-  - `tools/list` は一時起動して metadata を取得後に停止
-  - `tools/call` は対象 server のみ起動し、アイドル timeout 後に停止
 - `mcpe.json` の `env` で `${VAR}` 展開に対応
   - 親プロセス環境変数を優先
   - 未設定時は `.env` を参照
