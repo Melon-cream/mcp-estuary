@@ -134,6 +134,12 @@ codex mcp add estuary --url http://127.0.0.1:8080/mcp
 - `mcpe serve` 実行中は `mcpe.json` を定期監視して自動再読込します。
 - 設定不備がある server が混ざっても、正常な server はそのまま継続します。
 
+server ライフサイクル:
+
+- gateway 起動だけでは upstream MCP server は常駐起動しません。
+- `tools/list` は tool metadata の発見のために upstream server を短時間だけ起動し、直後に停止する場合があります。
+- `tools/call` は対象 upstream server だけを起動し、アイドル timeout 後に停止します。
+
 ## CLI
 
 ```text

@@ -134,6 +134,12 @@ Hot reload:
 - `mcpe serve` polls `mcpe.json` and reloads it automatically.
 - Invalid changes are isolated. Healthy servers continue serving.
 
+Server lifecycle:
+
+- Upstream MCP servers are not kept resident just because the gateway starts.
+- `tools/list` may start an upstream server briefly to discover tool metadata, then stop it immediately.
+- `tools/call` starts only the target upstream server and keeps it alive only until an idle timeout expires.
+
 ## Commands
 
 ```text

@@ -17,6 +17,8 @@ import (
 	"github.com/Melon-cream/mcp-estuary/internal/state"
 )
 
+const defaultIdleTimeout = 30 * time.Second
+
 type Manager struct {
 	logger   *log.Logger
 	mu       sync.RWMutex
@@ -35,9 +37,13 @@ type ServerHandle struct {
 
 	mu          sync.Mutex
 	client      *mcp.Client
+	cachedTools []mcp.Tool
 	toolMap     map[string]string
 	processStop context.CancelFunc
 	processLog  *os.File
+	idleTimer   *time.Timer
+	idleTimeout time.Duration
+	activeCalls int
 	state       string
 	lastStartAt time.Time
 	lastError   string
@@ -67,13 +73,14 @@ func newHandle(server config.Server, result install.Result, workDir string, logP
 		lastError = result.Error
 	}
 	return &ServerHandle{
-		server:    server,
-		workDir:   workDir,
-		logPath:   logPath,
-		logger:    logger,
-		install:   result,
-		state:     status,
-		lastError: lastError,
+		server:      server,
+		workDir:     workDir,
+		logPath:     logPath,
+		logger:      logger,
+		install:     result,
+		idleTimeout: defaultIdleTimeout,
+		state:       status,
+		lastError:   lastError,
 	}
 }
 
@@ -246,37 +253,33 @@ func (h *ServerHandle) ListTools(ctx context.Context) ([]mcp.Tool, error) {
 		h.setState("failed", h.install.Error, time.Time{})
 		return nil, fmt.Errorf("server %s is unavailable: %s", h.server.Name, h.install.Error)
 	}
-	client, err := h.ensureStarted(ctx)
-	if err != nil {
-		return nil, err
+	h.mu.Lock()
+	client := h.client
+	h.mu.Unlock()
+	if client != nil {
+		h.beginUse()
+		defer h.endUse()
+		return h.fetchTools(ctx, client)
 	}
-	var result mcp.ListToolsResult
-	if err := client.Call(ctx, "tools/list", mcp.ListToolsParams{}, &result); err != nil {
+	if tools := h.cachedToolsSnapshot(); len(tools) > 0 {
+		return tools, nil
+	}
+
+	h.setState("starting", "", time.Time{})
+	launched, err := h.launchClient(ctx)
+	if err != nil {
 		h.setState("failed", err.Error(), time.Time{})
 		return nil, err
 	}
-	tools := make([]mcp.Tool, 0, len(result.Tools))
-	toolMap := make(map[string]string, len(result.Tools))
-	for _, tool := range result.Tools {
-		prefixed := h.server.Name + "__" + tool.Name
-		toolMap[prefixed] = tool.Name
-		meta := cloneMap(tool.Meta)
-		if meta == nil {
-			meta = map[string]any{}
-		}
-		meta["upstreamServer"] = h.server.Name
-		meta["upstreamToolName"] = tool.Name
-		tool.Name = prefixed
-		tool.Meta = meta
-		if tool.Title == "" {
-			tool.Title = prefixed
-		}
-		tools = append(tools, tool)
+	defer launched.close()
+
+	tools, err := h.fetchTools(ctx, launched.client)
+	if err != nil {
+		h.setState("failed", err.Error(), time.Time{})
+		return nil, err
 	}
-	h.mu.Lock()
-	h.toolMap = toolMap
-	h.mu.Unlock()
-	h.setState("running", "", time.Time{})
+	h.setState("running", "", launched.startedAt)
+	h.setState("stopped", "", time.Time{})
 	return tools, nil
 }
 
@@ -285,6 +288,9 @@ func (h *ServerHandle) CallTool(ctx context.Context, prefixedName string, args m
 		h.setState("failed", h.install.Error, time.Time{})
 		return toolError(fmt.Sprintf("server %s is unavailable: %s", h.server.Name, h.install.Error)), nil
 	}
+	h.beginUse()
+	defer h.endUse()
+
 	client, err := h.ensureStarted(ctx)
 	if err != nil {
 		h.setState("failed", err.Error(), time.Time{})
@@ -301,44 +307,14 @@ func (h *ServerHandle) CallTool(ctx context.Context, prefixedName string, args m
 		h.setState("failed", err.Error(), time.Time{})
 		return toolError(err.Error()), nil
 	}
+	h.refreshCachedTools(ctx, client)
 	h.setState("running", "", time.Time{})
 	return result, nil
 }
 
 func (h *ServerHandle) Stop(ctx context.Context) error {
-	h.mu.Lock()
-	client := h.client
-	stop := h.processStop
-	logFile := h.processLog
-	h.client = nil
-	h.processStop = nil
-	h.processLog = nil
-	h.toolMap = nil
-	if h.install.Installed {
-		h.state = "stopped"
-	} else {
-		h.state = "failed"
-	}
-	h.mu.Unlock()
-	if stop != nil {
-		stop()
-	}
-	if logFile != nil {
-		defer logFile.Close()
-	}
-	if client == nil {
-		return nil
-	}
-	done := make(chan error, 1)
-	go func() {
-		done <- client.Close()
-	}()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-done:
-		return err
-	}
+	client, stop, logFile := h.detachClient(false)
+	return closeClient(ctx, client, stop, logFile)
 }
 
 func (h *ServerHandle) ensureStarted(ctx context.Context) (*mcp.Client, error) {
@@ -351,71 +327,25 @@ func (h *ServerHandle) ensureStarted(ctx context.Context) (*mcp.Client, error) {
 	h.state = "starting"
 	h.mu.Unlock()
 
-	logFile, err := os.OpenFile(h.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	launched, err := h.launchClient(ctx)
 	if err != nil {
-		h.setState("failed", fmt.Sprintf("open log file: %v", err), time.Time{})
-		return nil, fmt.Errorf("open log file: %w", err)
-	}
-	cmdName, args, runtimeEnv, err := install.BuildRunCommand(h.server, h.workDir)
-	if err != nil {
-		logFile.Close()
 		h.setState("failed", err.Error(), time.Time{})
 		return nil, err
-	}
-	processCtx, processStop := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(processCtx, cmdName, args...)
-	if h.server.Cwd != "" {
-		cmd.Dir = h.server.Cwd
-	} else {
-		cmd.Dir = h.workDir
-	}
-	cmd.Env = mergeEnv(os.Environ(), runtimeEnv, h.server.Env)
-	cmd.Stderr = logFile
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		processStop()
-		logFile.Close()
-		h.setState("failed", fmt.Sprintf("stdout pipe: %v", err), time.Time{})
-		return nil, fmt.Errorf("stdout pipe: %w", err)
-	}
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		processStop()
-		logFile.Close()
-		h.setState("failed", fmt.Sprintf("stdin pipe: %v", err), time.Time{})
-		return nil, fmt.Errorf("stdin pipe: %w", err)
-	}
-	client, err := mcp.Start(processCtx, cmd, stdout, stdin)
-	if err != nil {
-		processStop()
-		logFile.Close()
-		h.setState("failed", err.Error(), time.Time{})
-		return nil, err
-	}
-	startedAt := time.Now().UTC()
-	if _, err := client.Initialize(ctx); err != nil {
-		_ = client.Close()
-		processStop()
-		logFile.Close()
-		h.setState("failed", fmt.Sprintf("initialize server: %v", err), time.Time{})
-		return nil, fmt.Errorf("initialize server: %w", err)
 	}
 	h.mu.Lock()
 	if h.client == nil {
-		h.client = client
-		h.processStop = processStop
-		h.processLog = logFile
+		h.client = launched.client
+		h.processStop = launched.processStop
+		h.processLog = launched.logFile
 		h.state = "running"
-		h.lastStartAt = startedAt
+		h.lastStartAt = launched.startedAt
 		h.lastError = ""
 		h.mu.Unlock()
-		return client, nil
+		return launched.client, nil
 	}
 	active := h.client
 	h.mu.Unlock()
-	processStop()
-	_ = client.Close()
-	logFile.Close()
+	launched.close()
 	return active, nil
 }
 
@@ -492,6 +422,211 @@ func (h *ServerHandle) setState(nextState string, lastError string, startedAt ti
 	}
 }
 
+type launchedClient struct {
+	client      *mcp.Client
+	processStop context.CancelFunc
+	logFile     *os.File
+	startedAt   time.Time
+}
+
+func (h *ServerHandle) launchClient(ctx context.Context) (*launchedClient, error) {
+	logFile, err := os.OpenFile(h.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file: %w", err)
+	}
+	cmdName, args, runtimeEnv, err := install.BuildRunCommand(h.server, h.workDir)
+	if err != nil {
+		logFile.Close()
+		return nil, err
+	}
+	processCtx, processStop := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(processCtx, cmdName, args...)
+	if h.server.Cwd != "" {
+		cmd.Dir = h.server.Cwd
+	} else {
+		cmd.Dir = h.workDir
+	}
+	cmd.Env = mergeEnv(os.Environ(), runtimeEnv, h.server.Env)
+	cmd.Stderr = logFile
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		processStop()
+		logFile.Close()
+		return nil, fmt.Errorf("stdout pipe: %w", err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		processStop()
+		logFile.Close()
+		return nil, fmt.Errorf("stdin pipe: %w", err)
+	}
+	client, err := mcp.Start(processCtx, cmd, stdout, stdin)
+	if err != nil {
+		processStop()
+		logFile.Close()
+		return nil, err
+	}
+	startedAt := time.Now().UTC()
+	if _, err := client.Initialize(ctx); err != nil {
+		_ = client.Close()
+		processStop()
+		logFile.Close()
+		return nil, fmt.Errorf("initialize server: %w", err)
+	}
+	return &launchedClient{
+		client:      client,
+		processStop: processStop,
+		logFile:     logFile,
+		startedAt:   startedAt,
+	}, nil
+}
+
+func (c *launchedClient) close() {
+	if c == nil {
+		return
+	}
+	if c.processStop != nil {
+		c.processStop()
+	}
+	if c.client != nil {
+		_ = c.client.Close()
+	}
+	if c.logFile != nil {
+		_ = c.logFile.Close()
+	}
+}
+
+func (h *ServerHandle) fetchTools(ctx context.Context, client *mcp.Client) ([]mcp.Tool, error) {
+	var result mcp.ListToolsResult
+	if err := client.Call(ctx, "tools/list", mcp.ListToolsParams{}, &result); err != nil {
+		return nil, err
+	}
+	tools, toolMap := h.decorateTools(result.Tools)
+	h.mu.Lock()
+	h.cachedTools = cloneTools(tools)
+	h.toolMap = toolMap
+	h.mu.Unlock()
+	return tools, nil
+}
+
+func (h *ServerHandle) decorateTools(upstream []mcp.Tool) ([]mcp.Tool, map[string]string) {
+	tools := make([]mcp.Tool, 0, len(upstream))
+	toolMap := make(map[string]string, len(upstream))
+	for _, tool := range upstream {
+		prefixed := h.server.Name + "__" + tool.Name
+		toolMap[prefixed] = tool.Name
+		meta := cloneMap(tool.Meta)
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		meta["upstreamServer"] = h.server.Name
+		meta["upstreamToolName"] = tool.Name
+		tool.Name = prefixed
+		tool.Meta = meta
+		if tool.Title == "" {
+			tool.Title = prefixed
+		}
+		tools = append(tools, tool)
+	}
+	return tools, toolMap
+}
+
+func (h *ServerHandle) refreshCachedTools(ctx context.Context, client *mcp.Client) {
+	h.mu.Lock()
+	needsRefresh := len(h.cachedTools) == 0
+	h.mu.Unlock()
+	if !needsRefresh {
+		return
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, _ = h.fetchTools(refreshCtx, client)
+}
+
+func (h *ServerHandle) cachedToolsSnapshot() []mcp.Tool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return cloneTools(h.cachedTools)
+}
+
+func (h *ServerHandle) beginUse() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.activeCalls++
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
+	}
+}
+
+func (h *ServerHandle) endUse() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.activeCalls > 0 {
+		h.activeCalls--
+	}
+	if h.activeCalls != 0 || h.client == nil || h.idleTimeout <= 0 {
+		return
+	}
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+	}
+	h.idleTimer = time.AfterFunc(h.idleTimeout, h.idleStop)
+}
+
+func (h *ServerHandle) idleStop() {
+	client, stop, logFile := h.detachClient(true)
+	_ = closeClient(context.Background(), client, stop, logFile)
+}
+
+func (h *ServerHandle) detachClient(onlyIfIdle bool) (*mcp.Client, context.CancelFunc, *os.File) {
+	h.mu.Lock()
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
+	}
+	if onlyIfIdle && h.activeCalls > 0 {
+		h.mu.Unlock()
+		return nil, nil, nil
+	}
+	client := h.client
+	stop := h.processStop
+	logFile := h.processLog
+	h.client = nil
+	h.processStop = nil
+	h.processLog = nil
+	if h.install.Installed {
+		h.state = "stopped"
+		h.lastError = ""
+	} else {
+		h.state = "failed"
+	}
+	h.mu.Unlock()
+	return client, stop, logFile
+}
+
+func closeClient(ctx context.Context, client *mcp.Client, stop context.CancelFunc, logFile *os.File) error {
+	if stop != nil {
+		stop()
+	}
+	if logFile != nil {
+		defer logFile.Close()
+	}
+	if client == nil {
+		return nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- client.Close()
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		return err
+	}
+}
+
 func toolError(message string) mcp.CallToolResult {
 	return mcp.CallToolResult{
 		Content: []map[string]any{{"type": "text", "text": message}},
@@ -506,6 +641,19 @@ func cloneMap(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in))
 	for key, value := range in {
 		out[key] = value
+	}
+	return out
+}
+
+func cloneTools(in []mcp.Tool) []mcp.Tool {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]mcp.Tool, len(in))
+	for i, tool := range in {
+		out[i] = tool
+		out[i].InputSchema = cloneMap(tool.InputSchema)
+		out[i].Meta = cloneMap(tool.Meta)
 	}
 	return out
 }

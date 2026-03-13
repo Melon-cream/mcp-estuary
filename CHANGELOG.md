@@ -13,6 +13,7 @@
 ### Changed
 
 - Changed `mcpe serve` to launch in the background by default.
+- Changed upstream server lifecycle so `tools/list` performs transient discovery and `tools/call` keeps only the targeted server alive until idle timeout.
 - Added `${VAR}` expansion for `mcpe.json` `env` entries, using process environment variables first and `.env` next.
 - Added `.env` support for `MCPE_HOME`.
 - Applied `_PATH` relative path resolution after env expansion.
