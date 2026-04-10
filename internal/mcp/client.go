@@ -12,6 +12,17 @@ import (
 	"sync/atomic"
 )
 
+// MCPError is a protocol-level error returned by the upstream MCP server.
+// Transport errors (broken pipe, closed client, etc.) are returned as plain errors.
+type MCPError struct {
+	Code    int
+	Message string
+}
+
+func (e *MCPError) Error() string {
+	return fmt.Sprintf("mcp error %d: %s", e.Code, e.Message)
+}
+
 type Client struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -91,7 +102,7 @@ func (c *Client) Call(ctx context.Context, method string, params any, out any) e
 			return errors.New("client closed")
 		}
 		if response.Error != nil {
-			return fmt.Errorf("mcp error %d: %s", response.Error.Code, response.Error.Message)
+			return &MCPError{Code: response.Error.Code, Message: response.Error.Message}
 		}
 		if out != nil && len(response.Result) > 0 {
 			if err := json.Unmarshal(response.Result, out); err != nil {
@@ -111,19 +122,21 @@ func (c *Client) Notify(ctx context.Context, method string, params any) error {
 	}
 }
 
-func (c *Client) Close() error {
+func (c *Client) drainPending() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed {
-		c.mu.Unlock()
-		return nil
+		return
 	}
 	c.closed = true
 	for id, ch := range c.pending {
 		close(ch)
 		delete(c.pending, id)
 	}
-	c.mu.Unlock()
+}
 
+func (c *Client) Close() error {
+	c.drainPending()
 	c.cancel()
 	if c.stdin != nil {
 		_ = c.stdin.Close()
@@ -136,6 +149,7 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) readLoop(ctx context.Context, reader io.Reader) {
+	defer c.drainPending()
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -155,10 +169,11 @@ func (c *Client) readLoop(ctx context.Context, reader io.Reader) {
 			id := string(msg.ID)
 			c.mu.Lock()
 			waiter := c.pending[id]
-			c.mu.Unlock()
-			if waiter != nil {
+			if waiter != nil && !c.closed {
 				waiter <- msg
+				delete(c.pending, id)
 			}
+			c.mu.Unlock()
 		}
 	}
 }
