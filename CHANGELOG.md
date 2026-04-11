@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.2] - 2026-04-12
+
+### Fixed
+
+- Fixed a race condition between `readLoop` and `Close` in the stdio MCP client that caused `panic: send on closed channel`, crashing the gateway and producing `unknown session` errors on reconnect.
+- Fixed pending waiters left hanging when a subprocess exits unexpectedly by draining them with an EOF error on `readLoop` shutdown.
+- Fixed `ListTools` to clean up broken upstream clients on transport failure, matching the existing cleanup in `CallTool`.
+
+### Added
+
+- Added `MCPError` type to distinguish MCP protocol errors from transport-level errors.
+- Added `detachClientIfSame` helper for concurrency-safe upstream client cleanup.
+
 ## [0.2.1] - 2026-03-14
 
 ### Changed
