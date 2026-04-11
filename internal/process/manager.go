@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -259,7 +260,16 @@ func (h *ServerHandle) ListTools(ctx context.Context) ([]mcp.Tool, error) {
 	if client != nil {
 		h.beginUse()
 		defer h.endUse()
-		return h.fetchTools(ctx, client)
+		tools, err := h.fetchTools(ctx, client)
+		if err != nil {
+			var mcpErr *mcp.MCPError
+			if !errors.As(err, &mcpErr) {
+				oldClient, stop, logFile := h.detachClientIfSame(client)
+				_ = closeClient(context.Background(), oldClient, stop, logFile)
+			}
+			return nil, err
+		}
+		return tools, nil
 	}
 	if tools := h.cachedToolsSnapshot(); len(tools) > 0 {
 		return tools, nil
@@ -304,6 +314,11 @@ func (h *ServerHandle) CallTool(ctx context.Context, prefixedName string, args m
 	}
 	var result mcp.CallToolResult
 	if err := client.Call(ctx, "tools/call", mcp.CallToolParams{Name: upstreamName, Arguments: args}, &result); err != nil {
+		var mcpErr *mcp.MCPError
+		if !errors.As(err, &mcpErr) {
+			oldClient, stop, logFile := h.detachClientIfSame(client)
+			_ = closeClient(context.Background(), oldClient, stop, logFile)
+		}
 		h.setState("failed", err.Error(), time.Time{})
 		return toolError(err.Error()), nil
 	}
@@ -588,6 +603,32 @@ func (h *ServerHandle) detachClient(onlyIfIdle bool) (*mcp.Client, context.Cance
 	if onlyIfIdle && h.activeCalls > 0 {
 		h.mu.Unlock()
 		return nil, nil, nil
+	}
+	client := h.client
+	stop := h.processStop
+	logFile := h.processLog
+	h.client = nil
+	h.processStop = nil
+	h.processLog = nil
+	if h.install.Installed {
+		h.state = "stopped"
+		h.lastError = ""
+	} else {
+		h.state = "failed"
+	}
+	h.mu.Unlock()
+	return client, stop, logFile
+}
+
+func (h *ServerHandle) detachClientIfSame(broken *mcp.Client) (*mcp.Client, context.CancelFunc, *os.File) {
+	h.mu.Lock()
+	if h.client != broken {
+		h.mu.Unlock()
+		return nil, nil, nil
+	}
+	if h.idleTimer != nil {
+		h.idleTimer.Stop()
+		h.idleTimer = nil
 	}
 	client := h.client
 	stop := h.processStop

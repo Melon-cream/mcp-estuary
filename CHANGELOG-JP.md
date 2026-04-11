@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## [0.2.2] - 2026-04-12
+
+### Fixed
+
+- stdio MCP クライアントの `readLoop` と `Close` のレースコンディションにより `panic: send on closed channel` が発生し、gateway がクラッシュして再接続時に `unknown session` エラーとなる問題を修正
+- サブプロセスの予期しない終了時に pending waiter がハングする問題を修正（`readLoop` 終了時に EOF エラーで drain するよう変更）
+- `ListTools` でも transport エラー時に broken な upstream クライアントをクリーンアップするよう修正（`CallTool` と同等の処理を追加）
+
+### Added
+
+- MCP プロトコルエラーと transport エラーを区別する `MCPError` 型を追加
+- 並行安全な upstream クライアントクリーンアップ用の `detachClientIfSame` ヘルパーを追加
+
 ## [0.2.1] - 2026-03-14
 
 ### Changed
