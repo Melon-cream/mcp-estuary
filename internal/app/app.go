@@ -31,6 +31,8 @@ const (
 	defaultInstallConcurrency = 2
 )
 
+var version = "dev"
+
 func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		printUsage(stdout)
@@ -54,6 +56,9 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		return runStatus(args[1:], stdout, stderr)
 	case "--help", "-h", "help":
 		printUsage(stdout)
+		return 0
+	case "--version", "-v", "version":
+		fmt.Fprintf(stdout, "mcpe %s\n", version)
 		return 0
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n\n", args[0])
@@ -756,5 +761,6 @@ Usage:
   mcpe config set --install-concurrency N
   mcpe config set --systemd enable|disable [--config PATH] [--listen ADDR]
   mcpe --help
+  mcpe --version
 `)
 }

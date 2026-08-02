@@ -1,5 +1,7 @@
 FROM golang:1.26 AS builder
 
+ARG VERSION=dev
+
 WORKDIR /src
 COPY go.mod ./
 COPY cmd ./cmd
@@ -7,7 +9,7 @@ COPY internal ./internal
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/mcpe ./cmd/mcpe
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X github.com/Melon-cream/mcp-estuary/internal/app.version=${VERSION}" -o /out/mcpe ./cmd/mcpe
 
 FROM debian:bookworm-slim
 

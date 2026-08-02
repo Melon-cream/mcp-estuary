@@ -59,7 +59,7 @@ jobs:
 
           mkdir -p "${workdir}"
           CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
-            go build -trimpath -ldflags="-s -w" -o "${workdir}/${binary_name}" ./cmd/mcpe
+            go build -trimpath -ldflags="-s -w -X github.com/Melon-cream/mcp-estuary/internal/app.version=${GITHUB_REF_NAME#v}" -o "${workdir}/${binary_name}" ./cmd/mcpe
 
           cp README.md LICENSE.md "${workdir}/"
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -218,6 +219,21 @@ func TestRenderDoctorKeepsLabels(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunVersionFlags(t *testing.T) {
+	version = "test-version"
+	t.Cleanup(func() { version = "dev" })
+
+	for _, arg := range []string{"--version", "-v", "version"} {
+		var out, errBuf bytes.Buffer
+		if code := Run(context.Background(), []string{arg}, &out, &errBuf); code != 0 {
+			t.Fatalf("Run(%q) code = %d, want 0", arg, code)
+		}
+		if got := out.String(); got != "mcpe test-version\n" {
+			t.Fatalf("Run(%q) output = %q, want %q", arg, got, "mcpe test-version\n")
 		}
 	}
 }
