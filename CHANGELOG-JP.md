@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## [0.2.3] - 2026-08-03
+
+### Added
+
+- `mcpe --version` / `mcpe -v` / `mcpe version` を追加し、ビルド時にバージョンを注入してリリースバイナリの正確なバージョンを表示できるようにした
+
+### Fixed
+
+- `status` と `doctor` の状態ラベルを分離し、アイドル（`available`）サーバーが共通マッピングで誤表示されないよう修正
+- 生成する systemd unit に `PATH` 環境変数を含めるよう修正し、user systemd service から managed server が正しく起動できるようにした
+
 ## [0.2.2] - 2026-04-12
 
 ### Fixed

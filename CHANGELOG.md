@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.3] - 2026-08-03
+
+### Added
+
+- Added `mcpe --version`, `mcpe -v`, and `mcpe version` commands with build-time version injection, so release binaries report the exact version they were built from.
+
+### Fixed
+
+- Fixed `status` and `doctor` to use separate state-label mappings, so idle (`available`) servers are reported consistently instead of being labeled with a shared mapping.
+- Fixed generated systemd unit to include the `PATH` environment variable, so managed servers can be started correctly by the user systemd service.
+
 ## [0.2.2] - 2026-04-12
 
 ### Fixed
