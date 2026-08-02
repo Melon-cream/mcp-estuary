@@ -27,8 +27,8 @@ func TestServerHandleListToolsUsesTransientProcessAndCachesResults(t *testing.T)
 	if len(tools) != 1 || tools[0].Name != "fake__echo" {
 		t.Fatalf("unexpected tools: %+v", tools)
 	}
-	if got := handle.Snapshot().State; got != "stopped" {
-		t.Fatalf("expected stopped after transient tools/list, got %s", got)
+	if got := handle.Snapshot().State; got != "available" {
+		t.Fatalf("expected available after transient tools/list, got %s", got)
 	}
 
 	starts := readStarts(t, startLog)
@@ -71,7 +71,7 @@ func TestServerHandleCallToolStartsOnDemandAndStopsAfterIdle(t *testing.T) {
 		t.Fatalf("expected 1 process start after tools/call, got %d", starts)
 	}
 
-	waitForState(t, handle, "stopped", time.Second)
+	waitForState(t, handle, "available", time.Second)
 }
 
 func newTestHandle(t *testing.T, startLog string) *ServerHandle {
@@ -92,7 +92,7 @@ func newTestHandle(t *testing.T, startLog string) *ServerHandle {
 		logPath:     logPath,
 		logger:      log.New(os.Stderr, "", 0),
 		install:     install.Result{Name: "fake", Installed: true},
-		state:       "stopped",
+		state:       "available",
 		idleTimeout: defaultIdleTimeout,
 	}
 }

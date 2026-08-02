@@ -241,7 +241,7 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) int {
 				Args:      server.Args,
 				Cwd:       server.Cwd,
 				Env:       envState,
-				State:     "stopped",
+				State:     "unknown",
 				UpdatedAt: time.Now().UTC(),
 			}
 		}
@@ -283,9 +283,9 @@ func renderDoctor(w io.Writer, configPath string, cfg *config.Config, reports []
 	}
 	fmt.Fprintln(w)
 	for _, report := range reports {
-		fmt.Fprintf(w, "[%s] %s\n", statusLabel(report.State), report.Name)
+		fmt.Fprintf(w, "[%s] %s\n", doctorLabel(report.State), report.Name)
 		for _, check := range report.Checks {
-			fmt.Fprintf(w, "  - [%s] %s: %s\n", statusLabel(check.Status), check.Label, check.Details)
+			fmt.Fprintf(w, "  - [%s] %s: %s\n", doctorLabel(check.Status), check.Label, check.Details)
 		}
 		if report.ToolCount > 0 {
 			fmt.Fprintf(w, "  - tools discovered: %d\n", report.ToolCount)
@@ -349,6 +349,19 @@ func renderStatus(w io.Writer, configPath string, runtime state.RuntimeStatus, s
 }
 
 func statusLabel(status string) string {
+	switch status {
+	case "info", "unknown":
+		return "INFO"
+	case "ok", "running", "available":
+		return "OK"
+	case "starting":
+		return "WARN"
+	default:
+		return "ERR"
+	}
+}
+
+func doctorLabel(status string) string {
 	switch status {
 	case "info":
 		return "INFO"

@@ -67,7 +67,7 @@ func NewManager(servers map[string]config.Server, installs map[string]install.Re
 }
 
 func newHandle(server config.Server, result install.Result, workDir string, logPath string, logger *log.Logger) *ServerHandle {
-	status := "stopped"
+	status := "available"
 	lastError := ""
 	if !result.Installed {
 		status = "failed"
@@ -289,7 +289,7 @@ func (h *ServerHandle) ListTools(ctx context.Context) ([]mcp.Tool, error) {
 		return nil, err
 	}
 	h.setState("running", "", launched.startedAt)
-	h.setState("stopped", "", time.Time{})
+	h.setState("available", "", time.Time{})
 	return tools, nil
 }
 
@@ -611,7 +611,7 @@ func (h *ServerHandle) detachClient(onlyIfIdle bool) (*mcp.Client, context.Cance
 	h.processStop = nil
 	h.processLog = nil
 	if h.install.Installed {
-		h.state = "stopped"
+		h.state = "available"
 		h.lastError = ""
 	} else {
 		h.state = "failed"
@@ -637,7 +637,7 @@ func (h *ServerHandle) detachClientIfSame(broken *mcp.Client) (*mcp.Client, cont
 	h.processStop = nil
 	h.processLog = nil
 	if h.install.Installed {
-		h.state = "stopped"
+		h.state = "available"
 		h.lastError = ""
 	} else {
 		h.state = "failed"
