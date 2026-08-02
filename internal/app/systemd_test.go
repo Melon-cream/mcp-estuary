@@ -40,3 +40,12 @@ func TestBuildSystemdUnitContentUsesAbsoluteWorkingDirectoryWithoutQuotes(t *tes
 		t.Fatalf("WorkingDirectory should not be quoted: %s", content)
 	}
 }
+
+func TestBuildSystemdUnitContentIncludesPath(t *testing.T) {
+	t.Parallel()
+
+	content := buildSystemdUnitContent("/home/user/mcp-estuary/.tmp/mcpe", "/home/user/mcp-estuary/.tmp", "/home/user/mcp-estuary/.tmp/mcpe.json", "127.0.0.1:8080")
+	if !strings.Contains(content, "Environment=PATH=") {
+		t.Fatalf("unexpected Environment entry: %s", content)
+	}
+}

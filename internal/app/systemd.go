@@ -156,6 +156,7 @@ func buildSystemdUnitContent(executable string, workDir string, configPath strin
 		"[Service]",
 		"Type=simple",
 		"WorkingDirectory=" + workDir,
+		"Environment=PATH=" + escapeSystemdArg(os.Getenv("PATH")),
 		"ExecStart=" + systemdCommandLine([]string{
 			executable,
 			"serve",
